@@ -1,6 +1,6 @@
 If you run a big site or many blogs and would like to create some automated exports or run into memory/runtime issues with the web based exporter then this wrapper around the existing web-based WordPress exporter ( http://core.trac.wordpress.org/browser/trunk/wp-admin/includes/export.php ) will likely help you out here.
 
-Grab the file from https://github.com/tott/WordPress-CLI-Importer and copy it to your WordPress root folder or any other convenient location. 
+Grab the file from https://github.com/tott/WordPress-CLI-Exporter and copy it to your WordPress root folder or any other convenient location. 
 
 Make sure to set $wordpress_root_dir and $_SERVER['HTTP_HOST'] according to your environment. 
 
