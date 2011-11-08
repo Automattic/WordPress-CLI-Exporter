@@ -1,0 +1,22 @@
+If you run a big site or many blogs and would like to create some automated exports or run into memory/runtime issues with the web based exporter then this wrapper around the existing web-based WordPress exporter ( http://core.trac.wordpress.org/browser/trunk/wp-admin/includes/export.php ) will likely help you out here.
+
+Grab the file from https://github.com/tott/WordPress-CLI-Importer and copy it to your WordPress root folder or any other convenient location. 
+
+Make sure to set $wordpress_root_dir and $_SERVER['HTTP_HOST'] according to your environment. 
+
+Then execute the script with the following parameters ( brackets indicate optional parameters ):
+
+php cli-exporter.php --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] [--end_date=2011-12-31] [--post_type=post] [--author=admin] [--category=Uncategorized] [--post_status=publish] [--skip_comments=1]
+
+blogname: the name or blog_id of the blog you like to export
+path: the full path to the directory where exports should be stored
+user: the WordPress username that will run this export
+start_date: only export posts older than this date (format: YYYY-MM-DD)
+end_date: only export posts newer than this date (format: YYYY-MM-DD)
+post_type: export only posts matching this post_type
+author: export only posts for this user_login or user_id
+category: export only posts with this category name
+post_status: export only posts with a particular post status
+skip_comments: if this is set to 1 then comments will not be exported
+
+I hope this is useful. Feedback welcome at http://wp.me/p1lkCl-43Q
