@@ -151,18 +151,29 @@ class WordPress_CLI_Export {
 	}
 
 	private function cli_init_blog( $blog ) {
-		if ( is_numeric( $blog ) ) {
-			$blog_address = get_blogaddress_by_id( (int) $blog );
-		} else {
-			$blog_address = get_blogaddress_by_name( $blog );
-		}
+		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
+            if ( is_numeric( $blog ) ) {
+                $blog_address = get_blogaddress_by_id( (int) $blog );
+            } else {
+                $blog_address = get_blogaddress_by_name( $blog );
+            }
+        } else {
+            $blog_address = get_option( 'siteurl' );
+        }
 		if ( $blog_address == 'http://' || strstr( $blog_address, 'wordpress.com.wordpress.com' ) ) {
 			$this->debug_msg( sprintf( "the blog_address received from %s looks weird: %s", $blog, $blog_address ) );
 			return false;
 		}
 		$blog_address = str_replace( 'http://', '', $blog_address );
 		$blog_address = preg_replace( '#/$#', '', $blog_address );
-		$blog_id = get_blog_id_from_url( $blog_address );
+
+        if ( function_exists( 'is_multisite' ) && is_multisite() )
+            $blog_id = get_blog_id_from_url( $blog_address );
+        else {
+            global $wpdb;
+            $blog_address_sanitized = strtolower( $wpdb->escape( $blog_address ) );
+            $blog_id = md5( $blog_address_sanitized . '/' );
+        }
 
 		$home_url = str_replace( 'http://', '', get_home_url( $blog_id ) );
 		$home_url = preg_replace( '#/$#', '', $home_url );
