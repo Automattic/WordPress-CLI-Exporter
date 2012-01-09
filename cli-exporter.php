@@ -273,12 +273,13 @@ class WordPress_CLI_Export {
 			if ( $args['author'] )
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_author = %d", $args['author'] );
 
-			if ( $args['start_date'] )
+		}
+
+		if ( $args['start_date'] )
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date >= %s", date( 'Y-m-d', strtotime( $args['start_date'] ) ) );
 
-			if ( $args['end_date'] )
-				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date < %s", date( 'Y-m-d', strtotime( '+1 month', strtotime( $args['end_date'] ) ) ) );
-		}
+		if ( $args['end_date'] )
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d', strtotime( $args['end_date'] ) ) );
 
 		// grab a snapshot of post IDs, just in case it changes during the export
 		$post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where" );
@@ -467,7 +468,7 @@ class WordPress_CLI_Export {
 	}
 	
 	private function check_start_date( $date ) {
-		$time = strftime( $date );
+		$time = strtotime( $date );
 		if ( !empty( $date ) && !$time ) {
 			return false;
 		}
@@ -476,11 +477,11 @@ class WordPress_CLI_Export {
 	}
 	
 	private function check_end_date( $date ) {
-		$time = strftime( $date );
+		$time = strtotime( $date );
 		if ( !empty( $date ) && !$time ) {
 			return false;
 		}
-		$this->export_args['start_date'] = date( 'Y-m-d', $time );
+		$this->export_args['end_date'] = date( 'Y-m-d', $time );
 		return true;
 	}
 	
@@ -561,7 +562,7 @@ $exporter->set_argument_validation( '#^path$#', 'is_dir', 'path does not exist' 
 
 // optional filters
 $exporter->set_argument_validation( '#^start_date$#', 'check_start_date', 'invalid start_date use format YYYY-MM-DD' );
-$exporter->set_argument_validation( '#^end_date$#', 'check_start_date', 'invalid start_date use format YYYY-MM-DD' );
+$exporter->set_argument_validation( '#^end_date$#', 'check_end_date', 'invalid end_date use format YYYY-MM-DD' );
 $exporter->set_argument_validation( '#^post_type$#', 'check_post_type', 'invalid post_type' );
 $exporter->set_argument_validation( '#^author$#', 'check_author', 'invalid author' );
 $exporter->set_argument_validation( '#^category$#', 'check_category', 'invalid category' );
