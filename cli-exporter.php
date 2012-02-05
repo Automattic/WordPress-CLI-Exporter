@@ -151,18 +151,22 @@ class WordPress_CLI_Export {
 	}
 
 	private function cli_init_blog( $blog ) {
-		if ( is_numeric( $blog ) ) {
-			$blog_address = get_blogaddress_by_id( (int) $blog );
+		if ( is_multisite() ) {
+			if ( is_numeric( $blog ) ) {
+				$blog_address = get_blogaddress_by_id( (int) $blog );
+			} else {
+				$blog_address = get_blogaddress_by_name( $blog );
+			}
+			if ( $blog_address == 'http://' || strstr( $blog_address, 'wordpress.com.wordpress.com' ) ) {
+				$this->debug_msg( sprintf( "the blog_address received from %s looks weird: %s", $blog, $blog_address ) );
+				return false;
+			}
+			$blog_address = str_replace( 'http://', '', $blog_address );
+			$blog_address = preg_replace( '#/$#', '', $blog_address );
+			$blog_id = get_blog_id_from_url( $blog_address );
 		} else {
-			$blog_address = get_blogaddress_by_name( $blog );
+			$blog_id = 1;
 		}
-		if ( $blog_address == 'http://' || strstr( $blog_address, 'wordpress.com.wordpress.com' ) ) {
-			$this->debug_msg( sprintf( "the blog_address received from %s looks weird: %s", $blog, $blog_address ) );
-			return false;
-		}
-		$blog_address = str_replace( 'http://', '', $blog_address );
-		$blog_address = preg_replace( '#/$#', '', $blog_address );
-		$blog_id = get_blog_id_from_url( $blog_address );
 
 		$home_url = str_replace( 'http://', '', get_home_url( $blog_id ) );
 		$home_url = preg_replace( '#/$#', '', $home_url );
