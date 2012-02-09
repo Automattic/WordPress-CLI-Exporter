@@ -247,7 +247,20 @@ class WordPress_CLI_Export {
 				$append[]= "$arg_key-" . (string) $args[$arg_key];
 		}
 		$file_name_base = $sitename . 'wordpress.' . implode( ".", $append );
+
+		$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.wxr';
 		
+		// Create the file if it doesn't exist
+		if ( ! file_exists( $full_path ) ) {
+			touch( $full_path );
+			$this->debug_msg( 'Created file ' . $full_path );
+		}
+		
+		if ( ! file_exists( $full_path ) ) {
+			$this->debug_msg( "Failed to create file " . $full_path );
+			exit;
+		}
+
 		if ( 'all' != $args['content'] && post_type_exists( $args['content'] ) ) {
 			$ptype = get_post_type_object( $args['content'] );
 			if ( ! $ptype->can_export )
@@ -321,11 +334,13 @@ class WordPress_CLI_Export {
 			}
 
 		$this->debug_msg( 'Exporting ' . count( $post_ids ) . ' items' );
-		$this->debug_msg( 'Exporting ' . count( $cats ) . ' cateogries' );
+		$this->debug_msg( 'Exporting ' . count( $cats ) . ' categories' );
 		$this->debug_msg( 'Exporting ' . count( $tags ) . ' tags' );
 		$this->debug_msg( 'Exporting ' . count( $terms ) . ' terms' );
-		
-		ob_start();
+
+		$this->debug_msg( 'Writing to file ' . $full_path );
+
+		$this->start_export();
 		echo '<?xml version="1.0" encoding="' . get_bloginfo( 'charset' ) . "\" ?>\n";
 
 ?>
@@ -379,7 +394,9 @@ class WordPress_CLI_Export {
 <?php if ( 'all' == $args['content'] ) wxr_nav_menu_terms(); ?>
 
 	<?php do_action( 'rss2_head' ); ?>
-
+	<?php
+	$this->flush_export( $full_path, false );
+	?>
 <?php if ( $post_ids ) {
 			global $wp_query;
 			$wp_query->in_the_loop = true; // Fake being in the loop.
@@ -455,22 +472,34 @@ class WordPress_CLI_Export {
 <?php endif; ?>
 	</item>
 <?php
+				$this->flush_export( $full_path );
 				}
 			}
 		} ?>
 </channel>
 </rss>
 <?php
-		$result = ob_get_clean();
-		
-		$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.wxr';
-		
-		if ( !file_exists( $full_path ) || is_writeable( $full_path ) ) {
-			$this->debug_msg( 'Writing to ' . $full_path );
-			file_put_contents( $full_path, $result );
-		}
+		$this->flush_export( $full_path );
+		$this->end_export();
+		$this->debug_msg( 'All done!' );
 	}
-	
+
+	private function start_export() {
+		ob_start();
+	}
+
+	private function end_export() {
+		ob_end_clean();
+	}
+
+	private function flush_export( $file_path, $append = true ) {
+		$result = ob_get_clean();
+		if ( $append )
+			$append = FILE_APPEND;
+		file_put_contents( $file_path, $result, $append );
+		$this->start_export();
+	}
+
 	private function check_start_date( $date ) {
 		$time = strtotime( $date );
 		if ( !empty( $date ) && !$time ) {
