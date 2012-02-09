@@ -463,7 +463,7 @@ class WordPress_CLI_Export {
 <?php
 		$result = ob_get_clean();
 		
-		$full_path = $this->wxr_path . $file_name_base . '.wxr';
+		$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.wxr';
 		
 		if ( !file_exists( $full_path ) || is_writeable( $full_path ) ) {
 			$this->debug_msg( 'Writing to ' . $full_path );
