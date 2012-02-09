@@ -280,14 +280,14 @@ class WordPress_CLI_Export {
 		}
 
 		if ( $args['start_date'] )
-				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date >= %s", date( 'Y-m-d', strtotime( $args['start_date'] ) ) );
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date >= %s", date( 'Y-m-d 00:00:00', strtotime( $args['start_date'] ) ) );
 
 		if ( $args['end_date'] )
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d', strtotime( $args['end_date'] ) ) );
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d 23:59:59', strtotime( $args['end_date'] ) ) );
 
 		// grab a snapshot of post IDs, just in case it changes during the export
 		$post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where" );
-		
+
 		// get the requested terms ready, empty unless posts filtered by category or all content
 		$cats = $tags = $terms = array();
 		if ( isset( $term ) && $term ) {
