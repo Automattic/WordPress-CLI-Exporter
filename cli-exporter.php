@@ -143,7 +143,7 @@ class WordPress_CLI_Export {
 	}
 
 	private function show_help() {
-		$example = "php " . __FILE__ . " --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] --end_date=2011-12-31] [--post_type=post] [--author=admin] [--category=Uncategorized] [--post_status=publish] [--skip_comments=1]";
+		$example = "php " . __FILE__ . " --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] --end_date=2011-12-31] [--post_type=post] [--author=admin] [--category=Uncategorized] [--post_status=publish] [--skip_comments=1] [--file_item_count=1000]";
 		printf( "Please call the script with the following arguments: \n%s\n", $example );
 		foreach ( $this->required_args as $name => $description )
 			$msg .= $this->raise_required_argument_error( $name, $description );
@@ -216,11 +216,192 @@ class WordPress_CLI_Export {
 
 	private function export_wp( $args = array() ) {
 		global $wpdb, $post;
-		// call export_wp as we need the functions defined in it.
-		$dummy_args = array( 'content' => 'i-do-not-exist' );
-		ob_start();
-		export_wp( $dummy_args );
-		ob_end_clean();
+		/**
+		 * Wrap given string in XML CDATA tag.
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param string $str String to wrap in XML CDATA tag.
+		 */
+		function wxr_cdata( $str ) {
+			if ( seems_utf8( $str ) == false )
+				$str = utf8_encode( $str );
+
+			// $str = ent2ncr(esc_html($str));
+			$str = "<![CDATA[$str" . ( ( substr( $str, -1 ) == ']' ) ? ' ' : '' ) . ']]>';
+
+			return $str;
+		}
+
+		/**
+		 * Return the URL of the site
+		 *
+		 * @since 2.5.0
+		 *
+		 * @return string Site URL.
+		 */
+		function wxr_site_url() {
+			// ms: the base url
+			if ( is_multisite() )
+				return network_home_url();
+			// wp: the blog url
+			else
+				return get_bloginfo_rss( 'url' );
+		}
+
+		/**
+		 * Output a cat_name XML tag from a given category object
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param object $category Category Object
+		 */
+		function wxr_cat_name( $category ) {
+			if ( empty( $category->name ) )
+				return;
+
+			echo '<wp:cat_name>' . wxr_cdata( $category->name ) . '</wp:cat_name>';
+		}
+
+		/**
+		 * Output a category_description XML tag from a given category object
+		 *
+		 * @since 2.1.0
+		 *
+		 * @param object $category Category Object
+		 */
+		function wxr_category_description( $category ) {
+			if ( empty( $category->description ) )
+				return;
+
+			echo '<wp:category_description>' . wxr_cdata( $category->description ) . '</wp:category_description>';
+		}
+
+		/**
+		 * Output a tag_name XML tag from a given tag object
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param object $tag Tag Object
+		 */
+		function wxr_tag_name( $tag ) {
+			if ( empty( $tag->name ) )
+				return;
+
+			echo '<wp:tag_name>' . wxr_cdata( $tag->name ) . '</wp:tag_name>';
+		}
+
+		/**
+		 * Output a tag_description XML tag from a given tag object
+		 *
+		 * @since 2.3.0
+		 *
+		 * @param object $tag Tag Object
+		 */
+		function wxr_tag_description( $tag ) {
+			if ( empty( $tag->description ) )
+				return;
+
+			echo '<wp:tag_description>' . wxr_cdata( $tag->description ) . '</wp:tag_description>';
+		}
+
+		/**
+		 * Output a term_name XML tag from a given term object
+		 *
+		 * @since 2.9.0
+		 *
+		 * @param object $term Term Object
+		 */
+		function wxr_term_name( $term ) {
+			if ( empty( $term->name ) )
+				return;
+
+			echo '<wp:term_name>' . wxr_cdata( $term->name ) . '</wp:term_name>';
+		}
+
+		/**
+		 * Output a term_description XML tag from a given term object
+		 *
+		 * @since 2.9.0
+		 *
+		 * @param object $term Term Object
+		 */
+		function wxr_term_description( $term ) {
+			if ( empty( $term->description ) )
+				return;
+
+			echo '<wp:term_description>' . wxr_cdata( $term->description ) . '</wp:term_description>';
+		}
+
+		/**
+		 * Output list of authors with posts
+		 *
+		 * @since 3.1.0
+		 */
+		function wxr_authors_list() {
+			global $wpdb;
+
+			$authors = array();
+			$results = $wpdb->get_results( "SELECT DISTINCT post_author FROM $wpdb->posts" );
+			foreach ( (array) $results as $result )
+				$authors[] = get_userdata( $result->post_author );
+
+			$authors = array_filter( $authors );
+
+			foreach ( $authors as $author ) {
+				echo "\t<wp:author>";
+				echo '<wp:author_id>' . $author->ID . '</wp:author_id>';
+				echo '<wp:author_login>' . $author->user_login . '</wp:author_login>';
+				echo '<wp:author_email>' . $author->user_email . '</wp:author_email>';
+				echo '<wp:author_display_name>' . wxr_cdata( $author->display_name ) . '</wp:author_display_name>';
+				echo '<wp:author_first_name>' . wxr_cdata( $author->user_firstname ) . '</wp:author_first_name>';
+				echo '<wp:author_last_name>' . wxr_cdata( $author->user_lastname ) . '</wp:author_last_name>';
+				echo "</wp:author>\n";
+			}
+		}
+
+		/**
+		 * Ouput all navigation menu terms
+		 *
+		 * @since 3.1.0
+		 */
+		function wxr_nav_menu_terms() {
+			$nav_menus = wp_get_nav_menus();
+			if ( empty( $nav_menus ) || ! is_array( $nav_menus ) )
+				return;
+
+			foreach ( $nav_menus as $menu ) {
+				echo "\t<wp:term><wp:term_id>{$menu->term_id}</wp:term_id><wp:term_taxonomy>nav_menu</wp:term_taxonomy><wp:term_slug>{$menu->slug}</wp:term_slug>";
+				wxr_term_name( $menu );
+				echo "</wp:term>\n";
+			}
+		}
+
+		/**
+		 * Output list of taxonomy terms, in XML tag format, associated with a post
+		 *
+		 * @since 2.3.0
+		 */
+		function wxr_post_taxonomy() {
+			global $post;
+
+			$taxonomies = get_object_taxonomies( $post->post_type );
+			if ( empty( $taxonomies ) )
+				return;
+			$terms = wp_get_object_terms( $post->ID, $taxonomies );
+
+			foreach ( (array) $terms as $term ) {
+				echo "\t\t<category domain=\"{$term->taxonomy}\" nicename=\"{$term->slug}\">" . wxr_cdata( $term->name ) . "</category>\n";
+			}
+		}
+
+		function wxr_filter_postmeta( $return_me, $meta_key ) {
+			if ( '_edit_lock' == $meta_key )
+				$return_me = true;
+			return $return_me;
+		}
+		add_filter( 'wxr_export_skip_postmeta', 'wxr_filter_postmeta', 10, 2 );
+		
 		// now we can use the functions we need.
 		$this->debug_msg( "Initialized all functions we need" );
 		
@@ -228,8 +409,8 @@ class WordPress_CLI_Export {
 		/**
 		 * This is mostly the original code of export_wp defined in wp-admin/includes/export.php
 		 */
-		$defaults = array( 'content' => 'all', 'author' => false, 'category' => false,
-			'start_date' => false, 'end_date' => false, 'status' => false, 'skip_comments' => false,
+		$defaults = array( 'post_type' => 'all', 'author' => false, 'category' => false,
+			'start_date' => false, 'end_date' => false, 'status' => false, 'skip_comments' => false, 'file_item_count' => 1000,
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -237,60 +418,33 @@ class WordPress_CLI_Export {
 		
 		do_action( 'export_wp' );
 
-		$sitename = sanitize_key( get_bloginfo( 'name' ) );
-		if ( ! empty( $sitename ) )
-			$sitename .= '.';
-
-		$append = array( date( 'Y-m-d' ) );
-		foreach( array_keys( $args ) as $arg_key ) {
-			if ( $defaults[$arg_key] <> $args[$arg_key] )
-				$append[]= "$arg_key-" . (string) $args[$arg_key];
-		}
-		$file_name_base = $sitename . 'wordpress.' . implode( ".", $append );
-
-		$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.wxr';
-		
-		// Create the file if it doesn't exist
-		if ( ! file_exists( $full_path ) ) {
-			touch( $full_path );
-			$this->debug_msg( 'Created file ' . $full_path );
-		}
-		
-		if ( ! file_exists( $full_path ) ) {
-			$this->debug_msg( "Failed to create file " . $full_path );
-			exit;
-		}
-
-		if ( 'all' != $args['content'] && post_type_exists( $args['content'] ) ) {
-			$ptype = get_post_type_object( $args['content'] );
+		if ( 'all' != $args['post_type'] && post_type_exists( $args['post_type'] ) ) {
+			$ptype = get_post_type_object( $args['post_type'] );
 			if ( ! $ptype->can_export )
-				$args['content'] = 'post';
+				$args['post_type'] = 'post';
 
-			$where = $wpdb->prepare( "{$wpdb->posts}.post_type = %s", $args['content'] );
+			$where = $wpdb->prepare( "{$wpdb->posts}.post_type = %s", $args['post_type'] );
 		} else {
 			$post_types = get_post_types( array( 'can_export' => true ) );
 			$esses = array_fill( 0, count( $post_types ), '%s' );
 			$where = $wpdb->prepare( "{$wpdb->posts}.post_type IN (" . implode( ',', $esses ) . ')', $post_types );
 		}
 
-		if ( $args['status'] && ( 'post' == $args['content'] || 'page' == $args['content'] ) )
+		if ( $args['status'] && ( 'post' == $args['post_type'] || 'page' == $args['post_type'] ) )
 			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_status = %s", $args['status'] );
 		else
 			$where .= " AND {$wpdb->posts}.post_status != 'auto-draft'";
 
 		$join = '';
-		if ( $args['category'] && 'post' == $args['content'] ) {
+		if ( $args['category'] && 'post' == $args['post_type'] ) {
 			if ( $term = term_exists( $args['category'], 'category' ) ) {
 				$join = "INNER JOIN {$wpdb->term_relationships} ON ({$wpdb->posts}.ID = {$wpdb->term_relationships}.object_id)";
 				$where .= $wpdb->prepare( " AND {$wpdb->term_relationships}.term_taxonomy_id = %d", $term['term_taxonomy_id'] );
 			}
 		}
 
-		if ( 'post' == $args['content'] || 'page' == $args['content'] ) {
-			if ( $args['author'] )
-				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_author = %d", $args['author'] );
-
-		}
+		if ( $args['author'] )
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_author = %d", $args['author'] );
 
 		if ( $args['start_date'] )
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date >= %s", date( 'Y-m-d 00:00:00', strtotime( $args['start_date'] ) ) );
@@ -299,15 +453,15 @@ class WordPress_CLI_Export {
 			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d 23:59:59', strtotime( $args['end_date'] ) ) );
 
 		// grab a snapshot of post IDs, just in case it changes during the export
-		$post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where" );
+		$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where" );
 
-		// get the requested terms ready, empty unless posts filtered by category or all content
+		// get the requested terms ready, empty unless posts filtered by category or all post_types
 		$cats = $tags = $terms = array();
 		if ( isset( $term ) && $term ) {
 			$cat = get_term( $term['term_id'], 'category' );
 			$cats = array( $cat->term_id => $cat );
 			unset( $term, $cat );
-		} else if ( 'all' == $args['content'] ) {
+		} else if ( 'all' == $args['post_type'] ) {
 				$categories = (array) get_categories( array( 'get' => 'all' ) );
 				$tags = (array) get_tags( array( 'get' => 'all' ) );
 
@@ -333,15 +487,41 @@ class WordPress_CLI_Export {
 				unset( $categories, $custom_taxonomies, $custom_terms );
 			}
 
-		$this->debug_msg( 'Exporting ' . count( $post_ids ) . ' items' );
+		$this->debug_msg( 'Exporting ' . count( $all_the_post_ids ) . ' items to be broken into ' . ceil( count( $all_the_post_ids ) / $args['file_item_count'] ) . ' files' );
 		$this->debug_msg( 'Exporting ' . count( $cats ) . ' categories' );
 		$this->debug_msg( 'Exporting ' . count( $tags ) . ' tags' );
 		$this->debug_msg( 'Exporting ' . count( $terms ) . ' terms' );
 
-		$this->debug_msg( 'Writing to file ' . $full_path );
+		$sitename = sanitize_key( get_bloginfo( 'name' ) );
+		if ( ! empty( $sitename ) )
+			$sitename .= '.';
 
-		$this->start_export();
-		echo '<?xml version="1.0" encoding="' . get_bloginfo( 'charset' ) . "\" ?>\n";
+		$append = array( date( 'Y-m-d' ) );
+		foreach( array_keys( $args ) as $arg_key ) {
+			if ( $defaults[$arg_key] <> $args[$arg_key] )
+				$append[]= "$arg_key-" . (string) $args[$arg_key];
+		}
+		$file_name_base = $sitename . 'wordpress.' . implode( ".", $append );
+		$file_count = 1;
+		while ( $post_ids = array_splice( $all_the_post_ids, 0, $args['file_item_count'] ) ) {
+
+			$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.' . $file_count . '.wxr';
+			
+			// Create the file if it doesn't exist
+			if ( ! file_exists( $full_path ) ) {
+				touch( $full_path );
+				$this->debug_msg( 'Created file ' . $full_path );
+			}
+			
+			if ( ! file_exists( $full_path ) ) {
+				$this->debug_msg( "Failed to create file " . $full_path );
+				exit;
+			}
+
+			$this->debug_msg( 'Writing to file ' . $full_path );
+
+			$this->start_export();
+			echo '<?xml version="1.0" encoding="' . get_bloginfo( 'charset' ) . "\" ?>\n";
 
 ?>
 <!-- This is a WordPress eXtended RSS file generated by WordPress as an export of your site. -->
@@ -391,7 +571,7 @@ class WordPress_CLI_Export {
 <?php foreach ( $terms as $t ) : ?>
 	<wp:term><wp:term_id><?php echo $t->term_id ?></wp:term_id><wp:term_taxonomy><?php echo $t->taxonomy; ?></wp:term_taxonomy><wp:term_slug><?php echo $t->slug; ?></wp:term_slug><wp:term_parent><?php echo $t->parent ? $terms[$t->parent]->slug : ''; ?></wp:term_parent><?php wxr_term_name( $t ); ?><?php wxr_term_description( $t ); ?></wp:term>
 <?php endforeach; ?>
-<?php if ( 'all' == $args['content'] ) wxr_nav_menu_terms(); ?>
+<?php if ( 'all' == $args['post_type'] ) wxr_nav_menu_terms(); ?>
 
 	<?php do_action( 'rss2_head' ); ?>
 	<?php
@@ -479,8 +659,11 @@ class WordPress_CLI_Export {
 </channel>
 </rss>
 <?php
-		$this->flush_export( $full_path );
-		$this->end_export();
+			$this->flush_export( $full_path );
+			$this->end_export();
+			$this->stop_the_insanity();
+			$file_count++;
+		}
 		$this->debug_msg( 'All done!' );
 	}
 
@@ -524,7 +707,7 @@ class WordPress_CLI_Export {
 			$this->debug_msg( 'The post type ' . $post_type . ' does not exists. Choose "all" or any of these instead: ' . var_export( $post_types, true ) );
 			return false;
 		}
-		$this->export_args['content'] = $post_type;
+		$this->export_args['post_type'] = $post_type;
 		return true;
 	}
 	
@@ -583,6 +766,16 @@ class WordPress_CLI_Export {
 		$this->export_args['skip_comments'] = $skip;
 		return true;
 	}
+
+	private function check_file_item_count( $file_item_count ) {
+		$file_item_count = intval( $file_item_count );
+		if ( $file_item_count <= 1 ) {
+			$this->debug_msg( "file_item_count needs to be a valid integer larger than 1" );
+			return false;
+		}
+		$this->export_args['file_item_count'] = $file_item_count;
+		return true;
+	}
 }
 
 $exporter = new WordPress_CLI_Export;
@@ -601,5 +794,6 @@ $exporter->set_argument_validation( '#^author$#', 'check_author', 'invalid autho
 $exporter->set_argument_validation( '#^category$#', 'check_category', 'invalid category' );
 $exporter->set_argument_validation( '#^post_status$#', 'check_status', 'invalid status' );
 $exporter->set_argument_validation( '#^skip_comments#', 'check_skip_comments', 'please set this value to 0 or 1' );
+$exporter->set_argument_validation( '#^file_item_count#', 'check_file_item_count', 'please set this to a valid integer' );
 
 $exporter->init();
