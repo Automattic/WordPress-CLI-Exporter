@@ -5,11 +5,10 @@
  * Author URI: http://hitchhackerguide.com
  * Version: 0.1
  */
-define( 'WP_DEBUG', true );
 define( 'SAVEQUERIES', false );
 
 set_time_limit( 0 );
-ini_set( 'memory_limit', '512m' );
+ini_set( 'memory_limit', '768M' );
 
 if ( empty( $_SERVER['HTTP_HOST'] ) )
 	$_SERVER['HTTP_HOST'] = 'wp_trunk'; // set this to your main blog_address
@@ -69,7 +68,9 @@ class WordPress_CLI_Export {
 		$wp_object_cache->stats = array();
 		$wp_object_cache->memcache_debug = array();
 		$wp_object_cache->cache = array();
-		$wp_object_cache->__remoteset(); // important
+
+		if ( method_exists( $wp_object_cache, '__remoteset' ) )
+			$wp_object_cache->__remoteset(); // important
 	}
 
 	public function debug_msg( $msg ) {
@@ -226,10 +227,10 @@ class WordPress_CLI_Export {
 		function wxr_cdata( $str ) {
 			if ( seems_utf8( $str ) == false )
 				$str = utf8_encode( $str );
-
+	
 			// $str = ent2ncr(esc_html($str));
-			$str = "<![CDATA[$str" . ( ( substr( $str, -1 ) == ']' ) ? ' ' : '' ) . ']]>';
-
+			$str = '<![CDATA[' . str_replace( ']]>', ']]]]><![CDATA[>', $str ) . ']]>';
+	
 			return $str;
 		}
 
@@ -396,7 +397,8 @@ class WordPress_CLI_Export {
 		}
 
 		function wxr_filter_postmeta( $return_me, $meta_key ) {
-			if ( '_edit_lock' == $meta_key )
+			// We ignore the attachment metadata on import so no point in exporting it
+			if ( in_array( $meta_key, array( '_edit_lock', '_wp_attachment_metadata', '_wp_attached_file' ) ) )
 				$return_me = true;
 			return $return_me;
 		}
@@ -443,8 +445,15 @@ class WordPress_CLI_Export {
 			}
 		}
 
-		if ( $args['author'] )
-			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_author = %d", $args['author'] );
+		// Check that the author is a valid author and use it if so
+		if ( $args['author'] ) {
+			if ( is_numeric( $args['author'] ) )
+				$author = get_user_by( 'id', $args['author'] );
+			else
+				$author = get_user_by( 'login', $args['author'] );
+			if ( $author && !is_wp_error( $author ) )
+				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_author = %d", $author->ID );
+		}
 
 		if ( $args['start_date'] )
 				$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date >= %s", date( 'Y-m-d 00:00:00', strtotime( $args['start_date'] ) ) );
@@ -454,6 +463,12 @@ class WordPress_CLI_Export {
 
 		// grab a snapshot of post IDs, just in case it changes during the export
 		$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where" );
+
+		// Get attachments for posts if we're not doing an all lookup
+		if ( 'all' != $args['post_type'] ) {
+			$attachment_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_parent IN (". implode( ",", array_map( 'intval', $all_the_post_ids ) ) .")" );
+			$all_the_post_ids = array_merge( $all_the_post_ids, $attachment_ids );
+		}
 
 		// get the requested terms ready, empty unless posts filtered by category or all post_types
 		$cats = $tags = $terms = array();
@@ -499,13 +514,13 @@ class WordPress_CLI_Export {
 		$append = array( date( 'Y-m-d' ) );
 		foreach( array_keys( $args ) as $arg_key ) {
 			if ( $defaults[$arg_key] <> $args[$arg_key] )
-				$append[]= "$arg_key-" . (string) $args[$arg_key];
+				$append[]= "$arg_key-" . (string) sanitize_key( $args[$arg_key] );
 		}
 		$file_name_base = $sitename . 'wordpress.' . implode( ".", $append );
 		$file_count = 1;
 		while ( $post_ids = array_splice( $all_the_post_ids, 0, $args['file_item_count'] ) ) {
 
-			$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.' . $file_count . '.wxr';
+			$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.' . str_pad( $file_count, 3, '0', STR_PAD_LEFT ) . '.xml';
 			
 			// Create the file if it doesn't exist
 			if ( ! file_exists( $full_path ) ) {
@@ -618,12 +633,15 @@ class WordPress_CLI_Export {
 <?php  endif; ?>
 <?php  wxr_post_taxonomy(); ?>
 <?php $postmeta = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $wpdb->postmeta WHERE post_id = %d", $post->ID ) );
-					foreach ( $postmeta as $meta ) : if ( $meta->meta_key != '_edit_lock' ) : ?>
+		foreach ( $postmeta as $meta ) :
+			if ( apply_filters( 'wxr_export_skip_postmeta', false, $meta->meta_key, $meta ) )
+				continue;
+		?>
 		<wp:postmeta>
 			<wp:meta_key><?php echo $meta->meta_key; ?></wp:meta_key>
 			<wp:meta_value><?php echo wxr_cdata( $meta->meta_value ); ?></wp:meta_value>
 		</wp:postmeta>
-<?php endif; endforeach; ?>
+<?php	endforeach; ?>
 <?php if ( false === $args['skip_comments'] ): ?>
 <?php $comments = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $wpdb->comments WHERE comment_post_ID = %d AND comment_approved <> 'spam'", $post->ID ) );
 					foreach ( $comments as $c ) : ?>
@@ -635,7 +653,7 @@ class WordPress_CLI_Export {
 			<wp:comment_author_IP><?php echo $c->comment_author_IP; ?></wp:comment_author_IP>
 			<wp:comment_date><?php echo $c->comment_date; ?></wp:comment_date>
 			<wp:comment_date_gmt><?php echo $c->comment_date_gmt; ?></wp:comment_date_gmt>
-			<wp:comment_content><?php echo wxr_cdata( $c->comment_content ) ?></wp:comment_content>
+			<wp:comment_content><?php echo wxr_cdata( $c->comment_content ); ?></wp:comment_content>
 			<wp:comment_approved><?php echo $c->comment_approved; ?></wp:comment_approved>
 			<wp:comment_type><?php echo $c->comment_type; ?></wp:comment_type>
 			<wp:comment_parent><?php echo $c->comment_parent; ?></wp:comment_parent>
