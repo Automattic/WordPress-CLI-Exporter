@@ -461,6 +461,9 @@ class WordPress_CLI_Export {
 		if ( $args['end_date'] )
 			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d 23:59:59', strtotime( $args['end_date'] ) ) );
 
+		if ($args['start_id'])
+			$where .= $wpdb->prepare( " AND {$wpdb->posts}.ID > %d", $args['start_id'] );
+
 		// grab a snapshot of post IDs, just in case it changes during the export
 		$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where ORDER BY post_date ASC, post_parent ASC" );
 
@@ -719,6 +722,14 @@ class WordPress_CLI_Export {
 		return true;
 	}
 	
+	private function check_start_id( $id ) {
+		if ( !is_numeric( $id ) ) {
+			return false;
+		}
+		$this->export_args['start_id'] = intval( $id );
+		return true;
+	}
+	
 	private function check_post_type( $post_type ) {
 		$post_types = get_post_types();
 		if ( !in_array( $post_type, $post_types ) ) {
@@ -807,6 +818,7 @@ $exporter->set_argument_validation( '#^path$#', 'is_dir', 'path does not exist' 
 // optional filters
 $exporter->set_argument_validation( '#^start_date$#', 'check_start_date', 'invalid start_date use format YYYY-MM-DD' );
 $exporter->set_argument_validation( '#^end_date$#', 'check_end_date', 'invalid end_date use format YYYY-MM-DD' );
+$exporter->set_argument_validation( '#^start_id$#', 'check_start_id', 'invalid start_id' );
 $exporter->set_argument_validation( '#^post_type$#', 'check_post_type', 'invalid post_type' );
 $exporter->set_argument_validation( '#^author$#', 'check_author', 'invalid author' );
 $exporter->set_argument_validation( '#^category$#', 'check_category', 'invalid category' );
