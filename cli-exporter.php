@@ -184,35 +184,29 @@ class WordPress_CLI_Export {
 			}
 
 			if ( is_numeric( $blog ) ) {
-				$blog_address = get_blogaddress_by_id( (int) $blog );
+				$blog_id = (int) $blog;
 			} else {
-				$blog_address = get_blogaddress_by_name( $blog );
+				$blog_id = get_id_from_blogname( $blog );
 			}
-			if ( $blog_address == 'http://' || strstr( $blog_address, 'wordpress.com.wordpress.com' ) ) {
-				$this->debug_msg( sprintf( "the blog_address received from %s looks weird: %s", $blog, $blog_address ) );
-				return false;
-			}
-			$blog_address = str_replace( 'http://', '', $blog_address );
-			$blog_address = preg_replace( '#/$#', '', $blog_address );
-			$blog_id = get_blog_id_from_url( $blog_address );
 		} else {
 			$blog_id = 1;
 		}
 
-		$home_url = get_home_url( $blog_id );
-		$this->blog_host = parse_url( $home_url, PHP_URL_HOST );
-
-		$sanitized_home_url = $home_url;
-		$sanitized_home_url = str_replace( 'http://', '', $sanitized_home_url );
-		$sanitized_home_url = preg_replace( '#/$#', '', $sanitized_home_url );
-		$this->blog_address = $sanitized_home_url;
-
 		if ( $blog_id > 0 ) {
+			$home_url = get_home_url( $blog_id );
+			$this->blog_host = parse_url( $home_url, PHP_URL_HOST );
+	
+			$sanitized_home_url = $home_url;
+			$sanitized_home_url = str_replace( 'http://', '', $sanitized_home_url );
+			$sanitized_home_url = preg_replace( '#/$#', '', $sanitized_home_url );
+			$this->blog_address = $sanitized_home_url;
+
 			$this->debug_msg( sprintf( "the blog_address we found is %s (%d)", $this->blog_address, $blog_id ) );
 			$this->args->blog = $blog_id;
 			if ( function_exists( 'is_multisite' ) && is_multisite() )
 				switch_to_blog( (int) $blog_id );
 			$this->blog_id = (int) $blog_id;
+
 			return true;
 		} else {
 			$this->debug_msg( sprintf( "could not get a blog_id for this address: %s", var_export( $blog_id, true ) ) );
