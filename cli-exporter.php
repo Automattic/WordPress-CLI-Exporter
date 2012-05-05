@@ -3,8 +3,15 @@
  * CLI Version of the WordPress Exporter
  * Author: Thorsten Ott
  * Author URI: http://hitchhackerguide.com
- * Version: 0.1
+ * Version: 0.2
+ *
+ * Changelog:
+ *
+ * == v0.2 ==
+ * - Implement hostname hack used in CLI Importer (re-reun script with forced HTTP_HOST) so we don't lose custom post types and taxonomies
+ * 
  */
+cli_set_hostname();
 define( 'SAVEQUERIES', false );
 
 set_time_limit( 0 );
@@ -49,7 +56,20 @@ class WordPress_CLI_Export {
 			$this->debug_msg( "Problems with arguments" );
 			exit;
 		}
-		$this->dispatch();
+
+		if ( !empty( $this->args->hostname ) ) {
+			$this->dispatch();
+		} else {
+			// Re-run the export with a forced HTTP_HOST so that the full blog context is initialized
+			$this->debug_msg( "Initializing Environment" );
+			$this->args->hostname = $this->blog_address;
+			foreach( $this->args as $key => $value )
+				$args[] = "--$key=". escapeshellarg( $value );	
+
+			$command = "php " . __FILE__ . " " . implode( " ", (array) $args );
+			$this->debug_msg( "$command" );
+			system( $command );
+		}
 	}
 
 	public function dispatch() {
@@ -68,7 +88,6 @@ class WordPress_CLI_Export {
 		$wp_object_cache->stats = array();
 		$wp_object_cache->memcache_debug = array();
 		$wp_object_cache->cache = array();
-
 		if ( method_exists( $wp_object_cache, '__remoteset' ) )
 			$wp_object_cache->__remoteset(); // important
 	}
@@ -793,6 +812,15 @@ class WordPress_CLI_Export {
 		}
 		$this->export_args['file_item_count'] = $file_item_count;
 		return true;
+	}
+}
+
+function cli_set_hostname() {
+	foreach ( $_SERVER['argv'] as $arg ) {
+		if ( preg_match( '#--hostname=([^\s]+)#', $arg, $reg ) ) {
+			$_SERVER['HTTP_HOST'] = $reg[1];
+			return;
+		}
 	}
 }
 
