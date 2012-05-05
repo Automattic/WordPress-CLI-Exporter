@@ -163,6 +163,7 @@ class WordPress_CLI_Export {
 	}
 
 	private function show_help() {
+		$msg = '';
 		$example = "php " . __FILE__ . " --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] --end_date=2011-12-31] [--post_type=post] [--author=admin] [--category=Uncategorized] [--post_status=publish] [--skip_comments=1] [--file_item_count=1000]";
 		printf( "Please call the script with the following arguments: \n%s\n", $example );
 		foreach ( $this->required_args as $name => $description )
