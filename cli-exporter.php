@@ -9,6 +9,7 @@
  *
  * == v0.2 ==
  * - Implement hostname hack used in CLI Importer (re-reun script with forced HTTP_HOST) so we don't lose custom post types and taxonomies
+ * - Single-site instances no longer need to specify blog parameter
  * 
  */
 cli_set_hostname();
@@ -57,12 +58,16 @@ class WordPress_CLI_Export {
 			exit;
 		}
 
+		// In a single site instance, we don't need to pass in the blog_id, so let's force initialize the blog context
+		if ( empty( $this->blog_id ) )
+			$this->cli_init_blog();
+
 		if ( !empty( $this->args->hostname ) ) {
 			$this->dispatch();
 		} else {
 			// Re-run the export with a forced HTTP_HOST so that the full blog context is initialized
 			$this->debug_msg( "Initializing Environment" );
-			$this->args->hostname = $this->blog_address;
+			$this->args->hostname = $this->blog_host;
 			foreach( $this->args as $key => $value )
 				$args[] = "--$key=". escapeshellarg( $value );	
 
@@ -171,8 +176,13 @@ class WordPress_CLI_Export {
 
 	}
 
-	private function cli_init_blog( $blog ) {
+	private function cli_init_blog( $blog = 0 ) {
 		if ( is_multisite() ) {
+			if ( empty( $blog ) ) {
+				$this->debug_msg( "blog_id cannot be empty" );
+				die();
+			}
+
 			if ( is_numeric( $blog ) ) {
 				$blog_address = get_blogaddress_by_id( (int) $blog );
 			} else {
@@ -189,9 +199,13 @@ class WordPress_CLI_Export {
 			$blog_id = 1;
 		}
 
-		$home_url = str_replace( 'http://', '', get_home_url( $blog_id ) );
-		$home_url = preg_replace( '#/$#', '', $home_url );
-		$this->blog_address = $home_url;
+		$home_url = get_home_url( $blog_id );
+		$this->blog_host = parse_url( $home_url, PHP_URL_HOST );
+
+		$sanitized_home_url = $home_url;
+		$sanitized_home_url = str_replace( 'http://', '', $sanitized_home_url );
+		$sanitized_home_url = preg_replace( '#/$#', '', $sanitized_home_url );
+		$this->blog_address = $sanitized_home_url;
 
 		if ( $blog_id > 0 ) {
 			$this->debug_msg( sprintf( "the blog_address we found is %s (%d)", $this->blog_address, $blog_id ) );
@@ -436,7 +450,7 @@ class WordPress_CLI_Export {
 		);
 		$args = wp_parse_args( $args, $defaults );
 
-		$this->debug_msg( "Exporting with export_wp with arguments: " . var_export( $args, true ) );
+		$this->debug_msg( "Exporting with " . __CLASS__ . " with arguments: " . var_export( $args, true ) );
 		
 		do_action( 'export_wp' );
 
@@ -826,7 +840,8 @@ function cli_set_hostname() {
 }
 
 $exporter = new WordPress_CLI_Export;
-$exporter->set_required_arg( 'blog', 'Blog ID or name of the blog you like to export' );
+if ( is_multisite() )
+	$exporter->set_required_arg( 'blog', 'Blog ID or name of the blog you like to export' );
 $exporter->set_required_arg( 'path', 'Full Path to directory where WXR export files should be stored' );
 $exporter->set_required_arg( 'user', 'Username/ID the import should run as' );
 $exporter->set_argument_validation( '#^blog$#', 'cli_init_blog', 'blog invalid' );
