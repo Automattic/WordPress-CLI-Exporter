@@ -1,15 +1,18 @@
 <?php
 /**
  * CLI Version of the WordPress Exporter
- * Author: Thorsten Ott
+ * Author: Thorsten Ott, Automattic
  * Author URI: http://hitchhackerguide.com
  * Version: 0.2
+ *
+ * License: GPLv2
  *
  * Changelog:
  *
  * == v0.2 ==
  * - Implement hostname hack used in CLI Importer (re-reun script with forced HTTP_HOST) so we don't lose custom post types and taxonomies
  * - Single-site instances no longer need to specify blog parameter
+ * - For non-all post_type lookups, grab attachments in the batch along with the parent instead of upfront
  * 
  */
 cli_set_hostname();
@@ -492,12 +495,6 @@ class WordPress_CLI_Export {
 		// grab a snapshot of post IDs, just in case it changes during the export
 		$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where ORDER BY post_date ASC, post_parent ASC" );
 
-		// Get attachments for posts if we're not doing an all lookup
-		if ( 'all' != $args['post_type'] ) {
-			$attachment_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_parent IN (". implode( ",", array_map( 'intval', $all_the_post_ids ) ) .")" );
-			$all_the_post_ids = array_merge( $all_the_post_ids, $attachment_ids );
-		}
-
 		// get the requested terms ready, empty unless posts filtered by category or all post_types
 		$cats = $tags = $terms = array();
 		if ( isset( $term ) && $term ) {
@@ -547,6 +544,13 @@ class WordPress_CLI_Export {
 		$file_name_base = $sitename . 'wordpress.' . implode( ".", $append );
 		$file_count = 1;
 		while ( $post_ids = array_splice( $all_the_post_ids, 0, $args['file_item_count'] ) ) {
+
+			// Get attachments for posts if we're not doing an all lookup
+			if ( 'all' != $args['post_type'] ) {
+				$attachment_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = 'attachment' AND post_parent IN (". implode( ",", array_map( 'intval', $post_ids ) ) .")" );
+				if ( is_array( $attachment_ids ) )
+					$post_ids = array_merge( $post_ids, $attachment_ids );
+			}
 
 			$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.' . str_pad( $file_count, 3, '0', STR_PAD_LEFT ) . '.xml';
 			
