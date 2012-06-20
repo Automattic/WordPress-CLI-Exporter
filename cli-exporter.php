@@ -3,17 +3,41 @@
  * CLI Version of the WordPress Exporter
  * Author: Thorsten Ott, Automattic
  * Author URI: http://hitchhackerguide.com
- * Version: 0.2
+ * Version: 0.3
  *
  * License: GPLv2
  *
  * Changelog:
  *
+ * == v0.3 ==
+ * - Remove trailing whitespace
+ * - Add instructions at the top of the file
+ *
  * == v0.2 ==
  * - Implement hostname hack used in CLI Importer (re-reun script with forced HTTP_HOST) so we don't lose custom post types and taxonomies
  * - Single-site instances no longer need to specify blog parameter
  * - For non-all post_type lookups, grab attachments in the batch along with the parent instead of upfront
- * 
+ *
+ * Instructions:
+ *
+ * Make sure to set $wordpress_root_dir and $_SERVER['HTTP_HOST'] according to your environment.
+ *
+ * Then execute the script with the following parameters ( brackets indicate optional parameters ):
+ *
+ * php cli-exporter.php --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] [--end_date=2011-12-31] [--post_type=post] [--author=admin] [-- * category=Uncategorized] [--post_status=publish] [--skip_comments=1] [--file_item_count=1000]
+ *
+ * blogname: the name or blog_id of the blog you like to export
+ * path: the full path to the directory where exports should be stored
+ * user: the WordPress username or ID that will run this export
+ * start_date: only export posts older than this date (format: YYYY-MM-DD)
+ * end_date: only export posts newer than this date (format: YYYY-MM-DD)
+ * post_type: export only posts matching this post_type
+ * author: export only posts for this user_login or user_id
+ * category: export only posts with this category name
+ * post_status: export only posts with a particular post status
+ * skip_comments: if this is set to 1 then comments will not be exported
+ * file_item_count: how many items to include per file (will automatically break up into several files at the specified interval)
+ *
  */
 cli_set_hostname();
 define( 'SAVEQUERIES', false );
@@ -22,11 +46,11 @@ set_time_limit( 0 );
 ini_set( 'memory_limit', '768M' );
 
 if ( empty( $_SERVER['HTTP_HOST'] ) )
-	$_SERVER['HTTP_HOST'] = 'wp_trunk'; // set this to your main blog_address
+	$_SERVER['HTTP_HOST'] = 'clitools.wordpress.com'; // set this to your main blog_address
 if ( empty( $_SERVER['HTTP_HOST'] ) )
 	die( 'You need to the default HTTP_HOST in line ' . ( __LINE__ - 2 ) . "\n" );
-	
-$wordpress_root_dir = dirname( __FILE__ ); // set this to the root directory of your WordPress install that holds wp-load.php
+
+$wordpress_root_dir = dirname( dirname( dirname( __FILE__ ) ) ); // set this to the root directory of your WordPress install that holds wp-load.php
 if ( !file_exists( $wordpress_root_dir . '/wp-load.php' ) )
 	die( 'You need to the $wordpress_root_dir in line ' . ( __LINE__ - 2 ) . "\n" );
 
@@ -50,7 +74,7 @@ class WordPress_CLI_Export {
 	public $blog_address = 0;
 
 	public $export_args = array();
-	
+
 	public function __construct() {
 		$this->args = $this->get_cli_arguments();
 	}
@@ -72,7 +96,7 @@ class WordPress_CLI_Export {
 			$this->debug_msg( "Initializing Environment" );
 			$this->args->hostname = $this->blog_host;
 			foreach( $this->args as $key => $value )
-				$args[] = "--$key=". escapeshellarg( $value );	
+				$args[] = "--$key=". escapeshellarg( $value );
 
 			$command = "php " . __FILE__ . " " . implode( " ", (array) $args );
 			$this->debug_msg( "$command" );
@@ -198,7 +222,7 @@ class WordPress_CLI_Export {
 		if ( $blog_id > 0 ) {
 			$home_url = get_home_url( $blog_id );
 			$this->blog_host = parse_url( $home_url, PHP_URL_HOST );
-	
+
 			$sanitized_home_url = $home_url;
 			$sanitized_home_url = str_replace( 'http://', '', $sanitized_home_url );
 			$sanitized_home_url = preg_replace( '#/$#', '', $sanitized_home_url );
@@ -258,10 +282,10 @@ class WordPress_CLI_Export {
 		function wxr_cdata( $str ) {
 			if ( seems_utf8( $str ) == false )
 				$str = utf8_encode( $str );
-	
+
 			// $str = ent2ncr(esc_html($str));
 			$str = '<![CDATA[' . str_replace( ']]>', ']]]]><![CDATA[>', $str ) . ']]>';
-	
+
 			return $str;
 		}
 
@@ -434,11 +458,11 @@ class WordPress_CLI_Export {
 			return $return_me;
 		}
 		add_filter( 'wxr_export_skip_postmeta', 'wxr_filter_postmeta', 10, 2 );
-		
+
 		// now we can use the functions we need.
 		$this->debug_msg( "Initialized all functions we need" );
-		
-		
+
+
 		/**
 		 * This is mostly the original code of export_wp defined in wp-admin/includes/export.php
 		 */
@@ -448,7 +472,7 @@ class WordPress_CLI_Export {
 		$args = wp_parse_args( $args, $defaults );
 
 		$this->debug_msg( "Exporting with " . __CLASS__ . " with arguments: " . var_export( $args, true ) );
-		
+
 		do_action( 'export_wp' );
 
 		if ( 'all' != $args['post_type'] && post_type_exists( $args['post_type'] ) ) {
@@ -553,13 +577,13 @@ class WordPress_CLI_Export {
 			}
 
 			$full_path = trailingslashit( $this->wxr_path ) . $file_name_base . '.' . str_pad( $file_count, 3, '0', STR_PAD_LEFT ) . '.xml';
-			
+
 			// Create the file if it doesn't exist
 			if ( ! file_exists( $full_path ) ) {
 				touch( $full_path );
 				$this->debug_msg( 'Created file ' . $full_path );
 			}
-			
+
 			if ( ! file_exists( $full_path ) ) {
 				$this->debug_msg( "Failed to create file " . $full_path );
 				exit;
@@ -630,7 +654,7 @@ class WordPress_CLI_Export {
 
 			// fetch 20 posts at a time rather than loading the entire table into memory
 			while ( $next_posts = array_splice( $post_ids, 0, 20 ) ) {
-				
+
 				$where = 'WHERE ID IN (' . join( ',', $next_posts ) . ')';
 				$posts = $wpdb->get_results( "SELECT * FROM {$wpdb->posts} $where" );
 
@@ -741,7 +765,7 @@ class WordPress_CLI_Export {
 		$this->export_args['start_date'] = date( 'Y-m-d', $time );
 		return true;
 	}
-	
+
 	private function check_end_date( $date ) {
 		$time = strtotime( $date );
 		if ( !empty( $date ) && !$time ) {
@@ -750,7 +774,7 @@ class WordPress_CLI_Export {
 		$this->export_args['end_date'] = date( 'Y-m-d', $time );
 		return true;
 	}
-	
+
 	private function check_post_type( $post_type ) {
 		$post_types = get_post_types();
 		if ( !in_array( $post_type, $post_types ) ) {
@@ -760,7 +784,7 @@ class WordPress_CLI_Export {
 		$this->export_args['post_type'] = $post_type;
 		return true;
 	}
-	
+
 	private function check_author( $author ) {
 		$authors = get_users_of_blog();
 		if ( empty( $authors ) || is_wp_error( $authors ) ) {
@@ -778,11 +802,11 @@ class WordPress_CLI_Export {
 			$this->debug_msg( 'Could not find a matching author for ' . $author . '. The following authors exist: ' . var_export( $authors, true ) );
 			return false;
 		}
-		
+
 		$this->export_args['author'] = $hit;
 		return true;
 	}
-	
+
 	private function check_category( $category ) {
 		$term = category_exists( $category );
 		if ( empty( $term ) || is_wp_error( $term ) ) {
@@ -792,14 +816,14 @@ class WordPress_CLI_Export {
 		$this->export_args['category'] = $category;
 		return true;
 	}
-	
+
 	private function check_status( $status ) {
 		$stati = get_post_statuses();
 		if ( empty( $stati ) || is_wp_error( $stati ) ) {
 			$this->debug_msg( 'Could not find any post stati' );
 			return false;
 		}
-		
+
 		if ( !isset( $stati[$status] ) ) {
 			$this->debug_msg( 'There is no such post_status: ' . $status . '. Here is a list of available stati: ' . var_export( $stati, true ) );
 			return false;
@@ -807,7 +831,7 @@ class WordPress_CLI_Export {
 		$this->export_args['status'] = $status;
 		return true;
 	}
-	
+
 	private function check_skip_comments( $skip ) {
 		if ( (int) $skip <> 0 && (int) $skip <> 1 ) {
 			$this->debug_msg( "skip_comments needs to be 0 (no) or 1 (yes)" );
