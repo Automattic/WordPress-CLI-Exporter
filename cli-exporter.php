@@ -46,11 +46,11 @@ set_time_limit( 0 );
 ini_set( 'memory_limit', '768M' );
 
 if ( empty( $_SERVER['HTTP_HOST'] ) )
-	$_SERVER['HTTP_HOST'] = 'clitools.wordpress.com'; // set this to your main blog_address
+	$_SERVER['HTTP_HOST'] = 'localhost'; // set this to your main blog_address
 if ( empty( $_SERVER['HTTP_HOST'] ) )
 	die( 'You need to the default HTTP_HOST in line ' . ( __LINE__ - 2 ) . "\n" );
 
-$wordpress_root_dir = dirname( dirname( dirname( __FILE__ ) ) ); // set this to the root directory of your WordPress install that holds wp-load.php
+$wordpress_root_dir = dirname( __FILE__ ); // set this to the root directory of your WordPress install that holds wp-load.php
 if ( !file_exists( $wordpress_root_dir . '/wp-load.php' ) )
 	die( 'You need to the $wordpress_root_dir in line ' . ( __LINE__ - 2 ) . "\n" );
 
