@@ -24,7 +24,7 @@
  *
  * Then execute the script with the following parameters ( brackets indicate optional parameters ):
  *
- * php cli-exporter.php --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] [--end_date=2011-12-31] [--post_type=post] [--author=admin] [-- * category=Uncategorized] [--post_status=publish] [--skip_comments=1] [--file_item_count=1000]
+ * php cli-exporter.php --blog=blogname --path=/tmp/ --user=admin [--start_date=2011-01-01] [--end_date=2011-12-31] [--post_type=post] [--author=admin] [-- * category=Uncategorized] [--post_status=publish] [--skip_comments=1] [--file_item_count=1000] [--post_ids=2335108,2335110,2335114,2335111,2335112,2335109,2335113]
  *
  * blogname: the name or blog_id of the blog you like to export
  * path: the full path to the directory where exports should be stored
@@ -37,6 +37,7 @@
  * post_status: export only posts with a particular post status
  * skip_comments: if this is set to 1 then comments will not be exported
  * file_item_count: how many items to include per file (will automatically break up into several files at the specified interval)
+ * post_ids: export specific post ids, regardless of arguments
  *
  */
 cli_set_hostname();
@@ -50,7 +51,7 @@ if ( empty( $_SERVER['HTTP_HOST'] ) )
 if ( empty( $_SERVER['HTTP_HOST'] ) )
 	die( 'You need to the default HTTP_HOST in line ' . ( __LINE__ - 2 ) . "\n" );
 
-$wordpress_root_dir = dirname( __FILE__ ); // set this to the root directory of your WordPress install that holds wp-load.php
+$wordpress_root_dir = dirname( dirname( __FILE__ ) ); // set this to the root directory of your WordPress install that holds wp-load.php
 if ( !file_exists( $wordpress_root_dir . '/wp-load.php' ) )
 	die( 'You need to the $wordpress_root_dir in line ' . ( __LINE__ - 2 ) . "\n" );
 
@@ -468,6 +469,7 @@ class WordPress_CLI_Export {
 		 */
 		$defaults = array( 'post_type' => 'all', 'author' => false, 'category' => false,
 			'start_date' => false, 'end_date' => false, 'status' => false, 'skip_comments' => false, 'file_item_count' => 1000,
+			'post_ids' => '',
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -517,7 +519,10 @@ class WordPress_CLI_Export {
 			$where .= $wpdb->prepare( " AND {$wpdb->posts}.post_date <= %s", date( 'Y-m-d 23:59:59', strtotime( $args['end_date'] ) ) );
 
 		// grab a snapshot of post IDs, just in case it changes during the export
-		$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where ORDER BY post_date ASC, post_parent ASC" );
+		if ( empty( $args['post_ids'] ) )
+			$all_the_post_ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} $join WHERE $where ORDER BY post_date ASC, post_parent ASC" );
+		else
+			$all_the_post_ids = array_map( 'intval', explode( ',', $args['post_ids'] ) );
 
 		// get the requested terms ready, empty unless posts filtered by category or all post_types
 		$cats = $tags = $terms = array();
@@ -850,6 +855,19 @@ class WordPress_CLI_Export {
 		$this->export_args['file_item_count'] = $file_item_count;
 		return true;
 	}
+
+	private function check_post_ids( $post_ids ) {
+		if ( empty( $post_ids ) )
+			return true;
+
+		if ( !is_integer( $post_ids ) || false === strpos( $post_ids, ',' ) ) {
+			$this->debug_msg( "post_ids needs to be one or more post IDs separated by commas" );
+			return false;
+		}
+
+		$this->export_args['post_ids'] = $post_ids; 
+		return true;
+	}
 }
 
 function cli_set_hostname() {
@@ -879,5 +897,6 @@ $exporter->set_argument_validation( '#^category$#', 'check_category', 'invalid c
 $exporter->set_argument_validation( '#^post_status$#', 'check_status', 'invalid status' );
 $exporter->set_argument_validation( '#^skip_comments#', 'check_skip_comments', 'please set this value to 0 or 1' );
 $exporter->set_argument_validation( '#^file_item_count#', 'check_file_item_count', 'please set this to a valid integer' );
+$exporter->set_argument_validation( '#^post_ids#', 'check_post_ids', 'please set this to comma-separated string of post IDs' );
 
 $exporter->init();
